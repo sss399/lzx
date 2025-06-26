@@ -110,7 +110,7 @@ page = st.radio("请选择功能:", ["聊天助手", "数据分析智能体"])
 
 if page == "聊天助手":
     if 'messages' not in st.session_state:
-        st.session_state['messages'] = [('ai','你好，我是你的AI助手，我叫惺惺惜惺惺')]
+        st.session_state['messages'] = [('ai','你好，我是你的AI助手，我叫小九')]
 
     st.write('## 你最好的聊天伙伴')
 
@@ -132,7 +132,7 @@ if page == "聊天助手":
             result = st.chat_message('ai').write_stream(answer)
             st.session_state['messages'].append(('ai',result))
 else:
-    st.write("## 千锋数据分析智能体")
+    st.write("## 第九组数据分析智能体")
     option = st.radio("请选择数据文件类型:", ("Excel", "CSV"))
     file_type = "xlsx" if option == "Excel" else "csv"
     data = st.file_uploader(f"上传你的{option}数据文件", type=file_type)
