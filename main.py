@@ -2,15 +2,16 @@
 main.py - 自助式数据分析（数据分析智能体）
 
 Author: 骆昊
-Version: 0.1
-Date: 2025/6/25
+Version: 0.4
+Date: 2025/6/26
 """
 import random
 import matplotlib.pyplot as plt
 import openpyxl
 import pandas as pd
 import streamlit as st
-from langchain_openai import OpenAI
+from openai import OpenAI as OpenAIClient
+from langchain_openai import ChatOpenAI
 
 from utils import datafr, dataframe_agent
 from common import get_llm_response
@@ -44,21 +45,21 @@ def create_chart(input_data, chart_type):
 def show_data_summary(df):
     """显示数据统计摘要"""
     st.subheader("📊 数据统计摘要")
-    
+
     col1, col2, col3, col4 = st.columns(4)
-    
+
     with col1:
         st.metric("总行数", df.shape[0])
-    
+
     with col2:
         st.metric("总列数", df.shape[1])
-    
+
     with col3:
         st.metric("缺失值数量", df.isnull().sum().sum())
-    
+
     with col4:
         st.metric("数值列数量", len(df.select_dtypes(include=['number']).columns))
-    
+
     # 数据类型信息
     st.subheader("📋 列信息")
     col_info = pd.DataFrame({
@@ -69,7 +70,7 @@ def show_data_summary(df):
         '缺失率': (df.isnull().sum() / len(df) * 100).round(2).astype(str) + '%'
     })
     st.dataframe(col_info, use_container_width=True)
-    
+
     # 数值列的描述性统计
     numeric_cols = df.select_dtypes(include=['number']).columns
     if len(numeric_cols) > 0:
@@ -83,34 +84,59 @@ def get_answer(question: str):
       :return: 迭代器对象
     """
     try:
-        client = OpenAI(base_url=base_url,api_key=api_key)
-        stream = get_llm_response(client,model=model_name,user_prompt=question,stream=True)
+        # 检查缓存中是否已经存在相同的查询结果
+        if question in st.session_state.get('cache', {}):
+            return st.session_state['cache'][question]
+
+        if api_vendor == 'OpenAI':
+            client = OpenAIClient(base_url=base_url, api_key=api_key)
+            stream = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": question}],
+                stream=True
+            )
+        else:
+            client = ChatOpenAI(base_url=base_url, api_key=api_key, streaming=True, model_name=model_name)
+            stream = client.stream(question)
+
+        answer = ''
         for chunk in stream:
-            yield chunk.choices[0].delta.content or ''
-    # 修改get_answer函数的错误处理部分
+            if api_vendor == 'OpenAI':
+                content = chunk.choices[0].delta.content or ''
+            else:
+                content = chunk.content or ''
+            answer += content
+            yield content
+
+        # 将结果存储到缓存中
+        if 'cache' not in st.session_state:
+            st.session_state['cache'] = {}
+        st.session_state['cache'][question] = answer
+
     except BaseException as e:
         error_msg = f"错误详情: {str(e)}"
         st.error(error_msg)  # 在界面上显示错误
         yield from '暂时无法回答此问题,请检查你的配置是否正确'
 
+
 # 侧边栏配置
 with st.sidebar:
-    api_vendor = st.radio(label='请选择服务提供商:', options=['OpenAI','Deepseek'])
+    api_vendor = st.radio(label='请选择服务提供商:', options=['OpenAI', 'Deepseek'])
     if api_vendor == 'OpenAI':
-        base_url = 'https://twapi.openai-hk.com/v1'
-        model_options=['gpt-4o-mini','gpt-3.5-turbo','gpt-4o','gpt-4.1-mini','gpt-4.1']
+        base_url = 'https://api.openai.com/v1'  # 修改为官方API地址
+        model_options = ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo']  # 更新为可用模型列表
     elif api_vendor == 'Deepseek':
-        base_url = 'https://api.deepseek.com'
-        model_options =['deepseek-chat','deepseek-reasoner']
-    model_name = st.selectbox(label='请选择要使用的模型：',options=model_options)
-    api_key = st.text_input(label='请输入你的key：',type='password')
+        base_url = 'https://api.deepseek.com/v1'  # 添加API版本路径
+        model_options = ['deepseek-chat']  # Deepseek当前可用模型
+    model_name = st.selectbox(label='请选择要使用的模型：', options=model_options)
+    api_key = st.text_input(label='请输入你的API KEY：', type='password')
 
 # 页面选择
 page = st.radio("请选择功能:", ["聊天助手", "数据分析智能体"])
 
 if page == "聊天助手":
     if 'messages' not in st.session_state:
-        st.session_state['messages'] = [('ai','你好，我是你的AI助手，我叫小九')]
+        st.session_state['messages'] = [('ai', '你好，我是你的AI助手，我叫小九')]
 
     st.write('## 你最好的聊天伙伴')
 
@@ -118,19 +144,19 @@ if page == "聊天助手":
         st.error('请提供访问大模型需要的API KEY！')
         st.stop()
 
-    for role,content in st.session_state['messages']:
+    for role, content in st.session_state['messages']:
         st.chat_message(role).write(content)
 
-    user_input=st.chat_input(placeholder='请输入')
+    user_input = st.chat_input(placeholder='请输入')
 
     if user_input:
-        _,history = st.session_state['messages'][-1]
-        st.session_state['messages'].append(('human',user_input))
+        _, history = st.session_state['messages'][-1]
+        st.session_state['messages'].append(('human', user_input))
         st.chat_message('human').write(user_input)
         with st.spinner('AI正在思考，请耐心等待...'):
-            answer = get_answer(f'{history},{user_input}')
-            result = st.chat_message('ai').write_stream(answer)
-            st.session_state['messages'].append(('ai',result))
+            answer = ''.join(get_answer(f'{history},{user_input}'))
+            st.session_state['messages'].append(('ai', answer))
+            st.chat_message('ai').write(answer)
 else:
     st.write("## 第九组数据分析智能体")
     option = st.radio("请选择数据文件类型:", ("Excel", "CSV"))
@@ -144,10 +170,10 @@ else:
             st.session_state["df"] = pd.read_excel(data, sheet_name=option)
         else:
             st.session_state["df"] = pd.read_csv(data)
-        
+
         # 显示数据统计摘要
         show_data_summary(st.session_state["df"])
-        
+
         with st.expander("原始数据"):
             st.dataframe(st.session_state["df"])
 
