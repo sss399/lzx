@@ -124,10 +124,10 @@ with st.sidebar:
     api_vendor = st.radio(label='请选择服务提供商:', options=['OpenAI', 'Deepseek'])
     if api_vendor == 'OpenAI':
         base_url = 'https://api.openai.com/v1'  # 修改为官方API地址
-        model_options = ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo']  # 更新为可用模型列表
+        model_options = ['gpt-4o-mini','gpt-3.5-turbo','gpt-4o','gpt-4.1-mini','gpt-4.1']  # 更新为可用模型列表
     elif api_vendor == 'Deepseek':
         base_url = 'https://api.deepseek.com/v1'  # 添加API版本路径
-        model_options = ['deepseek-chat']  # Deepseek当前可用模型
+        model_options = ['deepseek-chat','deepseek-reasoner']  # Deepseek当前可用模型
     model_name = st.selectbox(label='请选择要使用的模型：', options=model_options)
     api_key = st.text_input(label='请输入你的API KEY：', type='password')
 
